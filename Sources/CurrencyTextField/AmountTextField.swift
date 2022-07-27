@@ -120,16 +120,13 @@ open class AmountTextField: UITextField {
         }
     }
     
-    open override var beginningOfDocument: UITextPosition {
-        guard
-            let currencySymbolRange = self.text!.range(of: self.currencySymbol),
-            currencySymbolRange.lowerBound == self.text!.startIndex
-        else { return super.beginningOfDocument }
-        
-        let searchPosition = self.text!.distance(from: self.text!.startIndex, to: currencySymbolRange.upperBound)
-        guard let position = self.position(from: super.beginningOfDocument, offset: searchPosition) else { return super.beginningOfDocument }
-        
-        return position
+    open override func caretRect(for position: UITextPosition) -> CGRect {
+        if position == self.endOfDocument {
+            return super.caretRect(for: position)
+        }
+        else {
+            return .null
+        }
     }
     
     open override var endOfDocument: UITextPosition {
@@ -137,39 +134,16 @@ open class AmountTextField: UITextField {
             let currencySymbolRange = self.text!.range(of: self.currencySymbol),
             currencySymbolRange.lowerBound != self.text!.startIndex
             else { return super.endOfDocument }
-        
+
         let searchPosition = self.text!.distance(from: self.text!.startIndex, to: currencySymbolRange.lowerBound)
         guard let position = self.position(from: super.beginningOfDocument, offset: searchPosition) else { return super.endOfDocument }
-        
+
         return position
     }
-    
+
     open override var selectedTextRange: UITextRange? {
         get { return super.selectedTextRange }
-        set {
-            guard var textRange = newValue else {
-                super.selectedTextRange = nil
-                return
-            }
-            
-            if self.offset(from: self.beginningOfDocument, to: textRange.start) < 0 {
-                guard let newRange = self.textRange(from: self.beginningOfDocument, to: textRange.end) else {
-                    super.selectedTextRange = nil
-                    return
-                }
-                textRange = newRange
-            }
-            
-            if self.offset(from: self.endOfDocument, to: textRange.end) > 0 {
-                guard let newRange = self.textRange(from: textRange.start, to: self.endOfDocument) else {
-                    super.selectedTextRange = nil
-                    return
-                }
-                textRange = newRange
-            }
-            
-            super.selectedTextRange = textRange
-        }
+        set { super.selectedTextRange = self.textRange(from: self.endOfDocument, to: self.endOfDocument) }
     }
     
     // MARK: - Initialisation
@@ -212,7 +186,7 @@ open class AmountTextField: UITextField {
             return false
         }
     }
-    
+
     open override func forwardingTarget(for aSelector: Selector!) -> Any? {
         if super.responds(to: aSelector) {
             return super.forwardingTarget(for: aSelector)
@@ -225,7 +199,7 @@ open class AmountTextField: UITextField {
             return nil
         }
     }
-    
+
     open override func method(for aSelector: Selector!) -> IMP! {
         if let signature = super.method(for: aSelector) {
             return signature
@@ -301,7 +275,10 @@ open class AmountTextField: UITextField {
         }
 
         self._amount = NSDecimalNumber(string: text, locale: self.locale).decimalValue
-        
+        if self._amount.isNaN {
+            self._amount = 0
+        }
+
         if !self.finishesWithZeroDecimals() || self.selectedTextRange!.start != self.endOfDocument {
             self.formatValueToCurrencyText()
         }
@@ -313,22 +290,22 @@ extension AmountTextField: UITextFieldDelegate {
         self.selectedTextRange = self.textRange(from: self.endOfDocument, to: self.endOfDocument)
         self.forwardDelegate?.textFieldDidBeginEditing?(textField)
     }
-    
+
     public func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
         let decimalSeparator = self.decimalSeparator
         let puntuationSet = CharacterSet(charactersIn: decimalSeparator)
         let decimalSet = CharacterSet.decimalDigits
         let allowedCharactersSet = decimalSet.union(puntuationSet)
-        
+
         if string.trimmingCharacters(in: allowedCharactersSet).count > 0 && string != "" {
             return false
         }
-        
+
         let text: String = textField.text!
         if textField.text!.rangeOfCharacter(from: puntuationSet) != nil && string.rangeOfCharacter(from: puntuationSet) != nil {
             return false
         }
-        
+
         // Check if we have a decimal separator
         let textRange = Range(range, in: text)!
         let finalString = text.replacingCharacters(in: textRange, with: string)
@@ -336,7 +313,7 @@ extension AmountTextField: UITextFieldDelegate {
             let endOfString = finalString[indexOfDecimalSeparator.upperBound...]
             let fractionalDigits = self.countDecimalsIn(string: endOfString)
             let maximumFractionalDigits = self.maximumFractionalDigits
-            
+
             // Prevent the users from using the decimal separator if there is a 0 maxFractionalDigit for the given configuration
             if maximumFractionalDigits == 0 {
                 return false
@@ -346,12 +323,12 @@ extension AmountTextField: UITextFieldDelegate {
                 return false
             }
         }
-        
+
         // Forward to the delegate
         if let forwardDelegateResult = self.forwardDelegate?.textField?(textField, shouldChangeCharactersIn: range, replacementString: string) {
             return forwardDelegateResult
         }
-        
+
         return true
     }
     
