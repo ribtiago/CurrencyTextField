@@ -21,7 +21,8 @@ public struct CurrencyTextField: UIViewRepresentable {
     
     public func makeUIView(context: Context) -> AmountTextField {
         let textField = AmountTextField(locale: self.locale, currencyCode: self.currencyCode)
-        textField.setContentHuggingPriority(.required, for: .horizontal)
+        textField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        textField.setContentHuggingPriority(.defaultLow, for: .horizontal)
         textField.setContentHuggingPriority(.required, for: .vertical)
         textField.borderStyle = self.style
         textField.font = self.font
