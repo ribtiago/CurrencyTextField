@@ -120,31 +120,78 @@ open class AmountTextField: UITextField {
         }
     }
     
-    open override func caretRect(for position: UITextPosition) -> CGRect {
-        if position == self.endOfDocument {
-            return super.caretRect(for: position)
-        }
-        else {
-            return .null
-        }
+    private var updatedBeginningOfDocument: UITextPosition {
+        guard
+            let currencySymbolRange = self.text!.range(of: self.currencySymbol),
+            currencySymbolRange.lowerBound == self.text!.startIndex
+        else { return super.beginningOfDocument }
+        
+        let searchPosition = self.text!.distance(from: self.text!.startIndex, to: currencySymbolRange.upperBound)
+        guard let position = self.position(from: super.beginningOfDocument, offset: searchPosition) else { return super.beginningOfDocument }
+        
+        return position
     }
     
-    open override var endOfDocument: UITextPosition {
+    private var updatedEndOfDocument: UITextPosition {
         guard
             let currencySymbolRange = self.text!.range(of: self.currencySymbol),
             currencySymbolRange.lowerBound != self.text!.startIndex
             else { return super.endOfDocument }
-
+        
         let searchPosition = self.text!.distance(from: self.text!.startIndex, to: currencySymbolRange.lowerBound)
         guard let position = self.position(from: super.beginningOfDocument, offset: searchPosition) else { return super.endOfDocument }
-
+        
         return position
     }
-
+    
     open override var selectedTextRange: UITextRange? {
         get { return super.selectedTextRange }
-        set { super.selectedTextRange = self.textRange(from: self.endOfDocument, to: self.endOfDocument) }
+        set {
+            guard var textRange = newValue else {
+                super.selectedTextRange = nil
+                return
+            }
+            
+            if self.offset(from: self.updatedBeginningOfDocument, to: textRange.start) < 0 {
+                var textRangeEnd = textRange.end
+                if self.offset(from: self.updatedBeginningOfDocument, to: textRangeEnd) < 0 {
+                    textRangeEnd = self.updatedBeginningOfDocument
+                }
+                guard let newRange = self.textRange(from: self.updatedBeginningOfDocument, to: textRangeEnd) else {
+                    super.selectedTextRange = nil
+                    return
+                }
+                textRange = newRange
+            }
+            
+            if self.offset(from: self.updatedEndOfDocument, to: textRange.end) > 0 {
+                var textRangeStart = textRange.start
+                if self.offset(from: self.updatedEndOfDocument, to: textRangeStart) > 0 {
+                    textRangeStart = self.updatedEndOfDocument
+                }
+                guard let newRange = self.textRange(from: textRangeStart, to: self.updatedEndOfDocument) else {
+                    super.selectedTextRange = nil
+                    return
+                }
+                textRange = newRange
+            }
+            
+            super.selectedTextRange = textRange
+        }
     }
+    
+    open override func caretRect(for position: UITextPosition) -> CGRect {
+        if self.offset(from: position, to: self.updatedBeginningOfDocument) > 0 {
+            return super.caretRect(for: self.updatedBeginningOfDocument)
+        }
+        else if self.offset(from: position, to: self.updatedEndOfDocument) < 0 {
+            return super.caretRect(for: self.updatedEndOfDocument)
+        }
+        else {
+            return super.caretRect(for: position)
+        }
+    }
+    
     
     // MARK: - Initialisation
     public init(locale: Locale = .current, currencyCode: CurrencyCode? = nil) {
@@ -255,7 +302,9 @@ open class AmountTextField: UITextField {
     }
     
     private func repositionCursor(at position: UITextPosition) {
-        self.selectedTextRange = self.textRange(from: position, to: position)
+        DispatchQueue.main.asyncAfter(deadline: .now()) {
+            self.selectedTextRange = self.textRange(from: position, to: position)
+        }
     }
     
     // MARK: - Format text changed action
@@ -279,7 +328,7 @@ open class AmountTextField: UITextField {
             self._amount = 0
         }
 
-        if !self.finishesWithZeroDecimals() || self.selectedTextRange!.start != self.endOfDocument {
+        if !self.finishesWithZeroDecimals() || self.selectedTextRange!.start != self.updatedEndOfDocument {
             self.formatValueToCurrencyText()
         }
     }
@@ -287,7 +336,7 @@ open class AmountTextField: UITextField {
 
 extension AmountTextField: UITextFieldDelegate {
     public func textFieldDidBeginEditing(_ textField: UITextField) {
-        self.selectedTextRange = self.textRange(from: self.endOfDocument, to: self.endOfDocument)
+        self.selectedTextRange = self.textRange(from: self.updatedEndOfDocument, to: self.updatedEndOfDocument)
         self.forwardDelegate?.textFieldDidBeginEditing?(textField)
     }
 
