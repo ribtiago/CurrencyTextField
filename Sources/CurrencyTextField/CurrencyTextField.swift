@@ -33,7 +33,9 @@ public struct CurrencyTextField: UIViewRepresentable {
     }
     
     public func updateUIView(_ uiView: AmountTextField, context: Context) {
-        uiView.amount = self.value
+        if self.value != uiView.amount {
+            uiView.amount = self.value
+        }
     }
     
     public func makeCoordinator() -> Coordinator {
